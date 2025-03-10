@@ -55,8 +55,6 @@ export default function EarthMap({ mapboxToken, onMeasure }: Props) {
       projection="equalEarth"
       onClick={handleClick}
     >
-      <Marker longitude={0} latitude={0} color="red" />
-
       {pointOfInterestNames.map((name) => {
         const { lng, lat } = convertPhysicalMapMeasurementToLngLat(
           pointOfInterestMeasurements[name],
