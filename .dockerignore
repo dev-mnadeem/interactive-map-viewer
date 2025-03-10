@@ -1,0 +1,26 @@
+# Build output and installed packages are produced inside the image.
+node_modules
+.next
+out
+
+# Version control and local tooling.
+.git
+.gitignore
+project_venv
+*.zip
+
+# 25 MB of per-country source outlines. The merged files the API serves are
+# generated from these and already live in public/.
+world-geojson
+
+# Documentation, screenshots and tests are not part of the running app.
+docs
+scripts
+test
+README.md
+*.md
+
+# Local secrets must never reach the build context.
+.env
+.env.*
+!.env.example
