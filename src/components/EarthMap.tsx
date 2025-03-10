@@ -37,7 +37,7 @@ export default function EarthMap({
       style={{ width: "100%", aspectRatio: "2 / 1" }}
       mapStyle="mapbox://styles/mapbox/streets-v11"
       mapboxAccessToken={mapboxToken}
-      projection="equalEarth"
+      projection={{ name: "equalEarth" }}
       onClick={(event: MapMouseEvent) =>
         onMapClick({ lng: event.lngLat.lng, lat: event.lngLat.lat })
       }
