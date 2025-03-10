@@ -32,7 +32,10 @@ export function serveDataset(
   dataset: Dataset,
   rootDir: string = process.cwd(),
 ): void {
-  const file = path.join(rootDir, dataset.path);
+  // Every dataset lives under public/, which ships with the app anyway.
+  // Without the ignore hint Turbopack cannot bound this path statically and
+  // traces the entire project into the server output.
+  const file = path.join(/*turbopackIgnore: true*/ rootDir, dataset.path);
 
   let size: number;
   try {

@@ -1,8 +1,7 @@
 # syntax=docker/dockerfile:1
 
-# Next 13.1 needs a Node 18 toolchain; newer majors break its SWC binary
-# resolution.
-ARG NODE_VERSION=18-alpine
+# Matches .nvmrc and package.json "engines". Next 16 needs Node 20.9 or newer.
+ARG NODE_VERSION=22-alpine
 
 # ---- dependencies (everything, including the build toolchain) ---------------
 FROM node:${NODE_VERSION} AS deps
