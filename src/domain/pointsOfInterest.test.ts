@@ -5,6 +5,7 @@ import {
   pointOfInterestAnswers,
   pointOfInterestMeasurements,
   pointOfInterestNames,
+  pointsOfInterest,
 } from "./pointsOfInterest";
 
 describe("the supplied exercise data", () => {
@@ -44,5 +45,23 @@ describe("the supplied exercise data", () => {
     expect(pointOfInterestMeasurements.TopOfAfrica.y).toBeLessThan(
       pointOfInterestMeasurements.BottomOfAfrica.y,
     );
+  });
+});
+
+describe("pointsOfInterest", () => {
+  it("labels each measurement in plain English", () => {
+    expect(pointsOfInterest.map(({ label }) => label)).toEqual([
+      "Top of Africa",
+      "Bottom of Africa",
+      "Top of Greenland",
+      "Bottom of Greenland",
+    ]);
+  });
+
+  it("plots each measurement at its published answer", () => {
+    for (const { name, lngLat } of pointsOfInterest) {
+      expect(lngLat.lng).toBeCloseTo(pointOfInterestAnswers[name].lng, 4);
+      expect(lngLat.lat).toBeCloseTo(pointOfInterestAnswers[name].lat, 4);
+    }
   });
 });

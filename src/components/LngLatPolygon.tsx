@@ -1,35 +1,31 @@
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import { Layer, Marker, Source } from "react-map-gl";
 
 import type { LngLatLiteral } from "../domain/conversion";
 import { isDrawablePolygon, toGeoJsonPolygon } from "../domain/polygon";
 
-import "mapbox-gl/dist/mapbox-gl.css";
-
 type Props = {
   id: string;
   lngLats: LngLatLiteral[];
-  fillColor?: string;
-  strokeColor?: string;
-  markerColor?: string;
+  fillColor: string;
+  strokeColor: string;
   /**
    * Show a draggable handle on every vertex. Sensible for a polygon the user
    * drew; not for imported outlines, where a coastline's few hundred points
    * become a wall of overlapping pins that hides the shape underneath.
    */
   editable?: boolean;
-  /** Called with the updated ring when a vertex is dragged. */
-  onChange?: (lngLats: LngLatLiteral[]) => void;
+  /** Called with a vertex's new position when its handle is dropped. */
+  onVertexMove?: (index: number, lngLat: LngLatLiteral) => void;
 };
 
 export default function LngLatPolygon({
   id,
   lngLats,
-  fillColor = "#0080ff",
-  strokeColor = "#000",
-  markerColor,
+  fillColor,
+  strokeColor,
   editable = false,
-  onChange,
+  onVertexMove,
 }: Props) {
   const geoJson = useMemo(() => toGeoJsonPolygon(lngLats), [lngLats]);
 
@@ -41,7 +37,7 @@ export default function LngLatPolygon({
             id={`${id}fill`}
             source={id}
             type="fill"
-            paint={{ "fill-color": fillColor, "fill-opacity": 0.5 }}
+            paint={{ "fill-color": fillColor, "fill-opacity": 0.35 }}
           />
           <Layer
             id={`${id}outline`}
@@ -59,14 +55,13 @@ export default function LngLatPolygon({
               latitude={point.lat}
               longitude={point.lng}
               draggable
-              color={markerColor}
-              onDragEnd={(event) => {
-                // Without this the handles were draggable but inert: the pin
-                // moved and the polygon stayed where it was.
-                const next = [...lngLats];
-                next[index] = { lng: event.lngLat.lng, lat: event.lngLat.lat };
-                onChange?.(next);
-              }}
+              color={strokeColor}
+              onDragEnd={(event) =>
+                onVertexMove?.(index, {
+                  lng: event.lngLat.lng,
+                  lat: event.lngLat.lat,
+                })
+              }
             />
           ))
         : null}

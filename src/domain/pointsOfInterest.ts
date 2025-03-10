@@ -1,4 +1,8 @@
-import type { LngLatLiteral, Point } from "./conversion";
+import {
+  convertPhysicalMapMeasurementToLngLat,
+  type LngLatLiteral,
+  type Point,
+} from "./conversion";
 
 /**
  * The four points of interest the exercise supplies, and the answers it
@@ -41,3 +45,14 @@ export const pointOfInterestAnswers: Record<PointOfInterestName, LngLatLiteral> 
 export const pointOfInterestNames = Object.keys(
   pointOfInterestMeasurements,
 ) as PointOfInterestName[];
+
+/** "TopOfAfrica" -> "Top of Africa". */
+const toLabel = (name: PointOfInterestName) =>
+  name.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/ Of /g, " of ");
+
+/** Each supplied measurement, labelled and converted, ready to plot. */
+export const pointsOfInterest = pointOfInterestNames.map((name) => ({
+  name,
+  label: toLabel(name),
+  lngLat: convertPhysicalMapMeasurementToLngLat(pointOfInterestMeasurements[name]),
+}));

@@ -1,78 +1,69 @@
-import React, { useState } from "react";
 import MapGL, { Marker } from "react-map-gl";
 import type { MapMouseEvent } from "mapbox-gl";
 
-import {
-  convertLngLatToPhysicalMapMeasurement,
-  convertPhysicalMapMeasurementToLngLat,
-  type LngLatLiteral,
-  type Point,
-} from "../domain/conversion";
-import {
-  pointOfInterestMeasurements,
-  pointOfInterestNames,
-} from "../domain/pointsOfInterest";
-import { useCoastline } from "../hooks/useCoastline";
+import type { LngLatLiteral } from "../domain/conversion";
+import { pointsOfInterest } from "../domain/pointsOfInterest";
+import { palette } from "./palette";
 import LngLatPolygon from "./LngLatPolygon";
 
 import "mapbox-gl/dist/mapbox-gl.css";
 
 type Props = {
   mapboxToken: string;
-  /** Called with the paper-map position of each click, in centimetres. */
-  onMeasure: (measurement: Point) => void;
+  vertices: LngLatLiteral[];
+  brazil: LngLatLiteral[];
+  onMapClick: (lngLat: LngLatLiteral) => void;
+  onVertexMove: (index: number, lngLat: LngLatLiteral) => void;
 };
 
 /**
- * The map itself.
+ * The Mapbox basemap, used when a token is configured.
  *
  * Kept in its own module so the page can load it with `next/dynamic`. Mapbox GL
  * JS is ~400 KB and needs a WebGL context, so there is nothing to gain from
  * putting it in the server-rendered bundle.
  */
-export default function EarthMap({ mapboxToken, onMeasure }: Props) {
-  const [polygonCoordinates, setPolygonCoordinates] = useState<LngLatLiteral[]>(
-    [],
-  );
-  const coastline = useCoastline("/api/brazil");
-
-  const handleClick = (event: MapMouseEvent) => {
-    // `event.point` is the click in screen pixels. What the readout is meant to
-    // show is where that lands on the 100 x 64 cm paper map, which is the
-    // inverse conversion.
-    const lngLat = { lng: event.lngLat.lng, lat: event.lngLat.lat };
-    onMeasure(convertLngLatToPhysicalMapMeasurement(lngLat));
-    setPolygonCoordinates((previous) => [...previous, lngLat]);
-  };
-
+export default function EarthMap({
+  mapboxToken,
+  vertices,
+  brazil,
+  onMapClick,
+  onVertexMove,
+}: Props) {
   return (
     <MapGL
       id="earth"
       initialViewState={{ longitude: 0, latitude: 0, zoom: 0.5 }}
-      style={{ display: "flex", flex: 1, flexGrow: 1, width: "100%" }}
+      style={{ width: "100%", height: "100%" }}
       mapStyle="mapbox://styles/mapbox/streets-v11"
       mapboxAccessToken={mapboxToken}
       projection="equalEarth"
-      onClick={handleClick}
+      onClick={(event: MapMouseEvent) =>
+        onMapClick({ lng: event.lngLat.lng, lat: event.lngLat.lat })
+      }
     >
-      {pointOfInterestNames.map((name) => {
-        const { lng, lat } = convertPhysicalMapMeasurementToLngLat(
-          pointOfInterestMeasurements[name],
-        );
-        return <Marker key={name} longitude={lng} latitude={lat} color="red" />;
-      })}
+      {pointsOfInterest.map(({ name, lngLat }) => (
+        <Marker
+          key={name}
+          longitude={lngLat.lng}
+          latitude={lngLat.lat}
+          color={palette.pin}
+        />
+      ))}
 
       <LngLatPolygon
-        id="user-polygon"
-        lngLats={polygonCoordinates}
-        editable
-        onChange={setPolygonCoordinates}
+        id="brazil"
+        lngLats={brazil}
+        fillColor={palette.brazil}
+        strokeColor={palette.brazilStroke}
       />
       <LngLatPolygon
-        id="brazil"
-        lngLats={coastline.points}
-        fillColor="#00a000"
-        strokeColor="#004d00"
+        id="user-polygon"
+        lngLats={vertices}
+        fillColor={palette.polygon}
+        strokeColor={palette.polygonStroke}
+        editable
+        onVertexMove={onVertexMove}
       />
     </MapGL>
   );

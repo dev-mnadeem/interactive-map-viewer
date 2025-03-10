@@ -9,8 +9,8 @@ import styles from "../styles/Home.module.css";
  */
 export default function MissingTokenNotice() {
   return (
-    <section className={styles.notice} aria-live="polite">
-      <h3>No Mapbox token configured</h3>
+    <div className={styles.notice}>
+      <h2>No Mapbox token configured</h2>
       <p>
         The map needs a Mapbox public token to draw anything at all. Create a
         free one at{" "}
@@ -35,6 +35,6 @@ export default function MissingTokenNotice() {
         The conversion itself needs no token and no network. <code>npm test</code>{" "}
         exercises it in full.
       </p>
-    </section>
+    </div>
   );
 }
