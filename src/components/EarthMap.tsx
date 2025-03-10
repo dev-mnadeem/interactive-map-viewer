@@ -34,7 +34,7 @@ export default function EarthMap({
     <MapGL
       id="earth"
       initialViewState={{ longitude: 0, latitude: 0, zoom: 0.5 }}
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", aspectRatio: "2 / 1" }}
       mapStyle="mapbox://styles/mapbox/streets-v11"
       mapboxAccessToken={mapboxToken}
       projection="equalEarth"

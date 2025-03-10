@@ -8,7 +8,6 @@ import {
 } from "../domain/conversion";
 import { editPolygon } from "../domain/polygonEditing";
 import { useCoastline } from "../hooks/useCoastline";
-import MissingTokenNotice from "../components/MissingTokenNotice";
 import ReadingPanel, { type Reading } from "../components/ReadingPanel";
 import styles from "../styles/Home.module.css";
 
@@ -22,9 +21,14 @@ const MapLoading = () => (
   </p>
 );
 
-// Mapbox GL JS is the bulk of this page's JavaScript and cannot server-render,
-// so it is split into its own chunk and loaded in the browser only.
+// Each basemap is its own chunk, fetched in the browser only when it is the
+// one in use: Mapbox GL JS is the bulk of the page's JavaScript and needs
+// WebGL, and the Natural Earth outlines are ~100 KB that a token makes moot.
 const EarthMap = dynamic(() => import("../components/EarthMap"), {
+  ssr: false,
+  loading: MapLoading,
+});
+const OutlineMap = dynamic(() => import("../components/OutlineMap"), {
   ssr: false,
   loading: MapLoading,
 });
@@ -76,7 +80,12 @@ export default function MapPage() {
                 onVertexMove={moveVertex}
               />
             ) : (
-              <MissingTokenNotice />
+              <OutlineMap
+                vertices={vertices}
+                brazil={brazil.points}
+                onMapClick={takeReading}
+                onVertexMove={moveVertex}
+              />
             )}
           </section>
 
