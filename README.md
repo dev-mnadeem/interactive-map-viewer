@@ -1,303 +1,222 @@
 # The Earth — paper map ↔ globe
 
-A 100 × 64 cm Mercator wall map, and a browser globe. This converts a ruler
-measurement taken off the paper map ("52.7 cm across, 24.8 cm down") into a real
-longitude and latitude, and back again.
+Take a ruler to a 100 × 64 cm Mercator wall map, read off "52.69693 cm across,
+24.84317 cm down", and this tells you that is 9.70895°E, 37.30287°N — the top of
+Africa. It plots the answer on an **Equal Earth** globe, where Greenland stops
+being bigger than Africa.
 
-It then draws the result on an **Equal Earth** projection, which is the point of
-the exercise: Mercator inflates everything near the poles, so on paper Greenland
-is *taller* than Africa. On a globe it plainly isn't.
+It began as a take-home exercise (hence the package name,
+`biodock-react-maps-interview`) and has been kept to that scope: better
+structure, real tests, honest documentation — not more features.
 
-This started life as a take-home interview exercise (hence the package name,
-`biodock-react-maps-interview`). It has been kept to that scope — better
-structure, real tests and honest documentation, not more features.
+## What it looks like
 
-## Screenshots
-
-The supplied brief, and where `TopOfAfrica` was measured from:
+The supplied paper map, with the `TopOfAfrica` measurement marked on it:
 
 ![The paper map, with the measurement marked](public/map-measurement.jpg)
 
-The same point, converted and plotted. Brazil's outline was **not** loaded from a
-geographic dataset — it is 172 centimetre measurements taken off the paper map,
-run through the conversion. It lands on Brazil, which is the clearest evidence
-the maths is right.
+The same sheet as a globe. Brazil's green outline is **not** loaded from a
+geographic dataset — it is 172 centimetre measurements taken off the paper map
+(`public/partial-brazil.json`), each one pushed through the conversion. That it
+lands on Brazil is the clearest evidence the maths is right. The red pins are
+the four measurements the exercise supplies.
 
-![The map](docs/01-map.png)
+![The globe, with Brazil drawn from paper measurements](docs/01-map.png)
 
-Click anywhere to read off where that point sits on the paper map, and to build a
-polygon. Its corner handles can be dragged.
+Clicking reads the click back off the paper map — the `x` / `y` readout in the
+header — and adds a vertex to a polygon you can drag by its corners.
 
-![Clicking the map](docs/02-clicked.png)
+![Clicking the map to build a polygon](docs/02-clicked.png)
 
-With no Mapbox token configured, the map is replaced by an explanation rather
-than a blank rectangle:
+## The conversion
 
-![The missing-token notice](docs/03-no-token.png)
+Two functions in `src/domain/conversion.ts`, and nothing else in the project is
+as important:
 
-## Architecture
+| | |
+|---|---|
+| longitude | a linear rescale of `x` from `[0, 100] cm` onto `[-180, 180]°` |
+| latitude | the **Gudermannian** of `y` rescaled onto `[π, -π]` — `atan(sinh y)` |
+| inverse | `atanh(sin φ)`, which is where Mercator's vertical stretch comes from |
 
-The conversion is the part worth protecting, so it sits in a `domain/` layer that
-knows nothing about Mapbox, React or Next.js — it is plain arithmetic over plain
-objects. Everything else points inward at it.
+The module imports nothing. No React, no Next.js, no Mapbox — plain arithmetic
+over `{ x, y }` and `{ lng, lat }` objects, so the whole suite runs offline in
+under a second.
 
-```mermaid
-flowchart TD
-  subgraph browser["Browser"]
-    page["pages/index.tsx<br/>layout and readout state"]
-    notice["MissingTokenNotice"]
-    map["EarthMap<br/>next/dynamic, ssr false"]
-    poly["LngLatPolygon"]
-    hook["useCoastline"]
-  end
+Two properties are worth calling out, because both are pinned by name in
+`src/domain/conversion.test.ts`:
 
-  subgraph server["Next.js server"]
-    routes["api/brazil<br/>api/countries/coords<br/>api/countries/physical<br/>api/health"]
-    serve["server/serveDataset"]
-    registry["server/datasets<br/>the registry"]
-  end
+- **The map edge is 85.0511°, not 90°.** Mercator sends latitude 90° to infinite
+  height, so a sheet of finite size has to stop short. `y = 0` yields
+  +85.0511287798066°, and *"has no jump at the top and bottom edges"* checks the
+  function stays continuous there rather than snapping the top row of paper onto
+  the North Pole.
+- **The poles clamp instead of diverging.** `inverseGudermannian(±90)` genuinely
+  goes to infinity, so the reverse conversion returns the map edge —
+  *"clamps to the map edge instead of returning Infinity"*.
 
-  subgraph domain["domain — pure, no map library"]
-    conv["conversion.ts"]
-    poi["pointsOfInterest.ts"]
-    pg["polygon.ts"]
-  end
+The exercise's own point is a test too: *"draws Greenland taller than Africa on
+paper"* and *"but Africa spans about three times the latitude"*, the second
+asserting the ratio lands between 2.9 and 3.1.
 
-  files[("public/*.json")]
+## What a click does
 
-  page --> notice
-  page --> map
-  map --> poly
-  map --> hook
-  hook -->|"GET /api/brazil"| routes
-  routes --> serve
-  serve --> registry
-  serve --> files
-  map --> conv
-  map --> poi
-  hook --> conv
-  poly --> pg
-  pg --> conv
-```
-
-## The main flow
-
-Loading the coastline, and reading a click back off the paper map. The numbers
-below are from an actual run — a click on the horizontal centre of a 1440 px
-viewport, which is longitude 0 and therefore exactly 50 cm across the sheet.
+The polygon you draw has three states, and the middle one is the non-obvious
+part: one or two clicks draw handles but no shape, because a GeoJSON linear ring
+needs three distinct vertices to enclose an area (`MINIMUM_RING_VERTICES` in
+`src/domain/polygon.ts`).
 
 ```mermaid
-sequenceDiagram
-  actor User
-  participant Page as pages/index.tsx
-  participant Map as EarthMap
-  participant Hook as useCoastline
-  participant API as /api/brazil
-  participant Conv as domain/conversion
+stateDiagram-v2
+  state "no vertices yet" as Empty
+  state "handles only - 1 or 2 vertices" as Open
+  state "filled ring - 3 or more vertices" as Closed
 
-  Page->>Map: mount (token present)
-  Map->>Hook: useCoastline("/api/brazil")
-  Hook->>API: GET
-  API-->>Hook: 172 [x, y] centimetre pairs
-  loop each measurement
-    Hook->>Conv: convertPhysicalMapMeasurementToLngLat
-    Conv-->>Hook: lng, lat
-  end
-  Hook-->>Map: coastline as coordinates
-  Map->>Map: draw the Brazil polygon
+  [*] --> Empty
+  Empty --> Open: click
+  Open --> Open: click, or drag a handle
+  Open --> Closed: the click that reaches 3 vertices
+  Closed --> Closed: click appends, or drag rewrites a vertex
 
-  User->>Map: click
-  Map->>Conv: convertLngLatToPhysicalMapMeasurement
-  Conv-->>Map: x 50.000, y 32.591
-  Map-->>Page: onMeasure
-  Page-->>User: "x 50.000 cm - y 32.591 cm"
+  note right of Closed
+    toGeoJsonPolygon closes the ring by repeating
+    the first position last. An empty input returns
+    an empty ring, not a ring holding undefined.
+  end note
 ```
 
-## Quickstart
+Every click, in every state, also runs the reverse conversion and updates the
+centimetre readout. Brazil's outline is drawn by the same `LngLatPolygon`
+component with `editable` off — a coastline's hundreds of vertices as draggable
+pins would be a wall of overlapping markers hiding the shape underneath.
+
+## Running it
 
 ```bash
 npm install
 npm run dev            # http://localhost:4500
 ```
 
-The app runs without any configuration — the conversion, the API routes and the
-whole test suite need no token and no network. Only the basemap does. For that,
-get a free [Mapbox public token](https://account.mapbox.com/access-tokens/):
+That works with no configuration at all — the conversion, the API routes and the
+entire test suite need neither a token nor a network. **The basemap is the one
+part that does.** This repository ships no Mapbox token and none is bundled; you
+need your own free [Mapbox public token](https://account.mapbox.com/access-tokens/):
 
 ```bash
-echo 'NEXT_PUBLIC_MAPBOX_TOKEN=pk.your_token' > .env.local
+cp .env.example .env.local     # then put your own pk.… token in it
 npm run dev
 ```
 
-With Docker:
+Without one the map area is replaced by a panel explaining exactly that, rather
+than a blank rectangle with the reason hidden in the browser console — Mapbox GL
+JS v3 refuses to draw anything at all without a valid token:
 
-```bash
-cp .env.example .env   # add your token
-docker compose up --build
-```
+![The missing-token notice](docs/03-no-token.png)
 
-## Configuration
+A Docker setup is included — `cp .env.example .env`, then
+`docker compose up --build`. It was not built or booted in this pass (Docker was
+unavailable), so treat it as reviewed-by-reading rather than as verified.
+
+## Environment
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `NEXT_PUBLIC_MAPBOX_TOKEN` | No | empty | Mapbox public token for the basemap. Without it the map is replaced by the notice shown above; everything else still works. **Inlined into the client bundle at build time** — see the note below. |
-| `PORT` | No | `4500` | Port `npm run dev` and `npm run start` listen on. |
+| `NEXT_PUBLIC_MAPBOX_TOKEN` | No | unset | **Your own** Mapbox public token. Unset means the notice above instead of the basemap; everything else still works. |
+| `PORT` | No | `4500` | Port `npm run dev` and `npm start` listen on. |
 | `HOST_PORT` | No | `4500` | Host port `docker compose` publishes to. |
-| `NEXT_TELEMETRY_DISABLED` | No | `1` | Set by the npm scripts and the Dockerfile; Next.js telemetry stays off. |
+| `NEXT_TELEMETRY_DISABLED` | No | `1` | Set by the npm scripts and the Dockerfile. |
 
-`NEXT_PUBLIC_*` variables are substituted into the JavaScript bundle when the app
-is **built**, not when it starts. Setting the token on an already-built container
+`NEXT_PUBLIC_*` values are substituted into the JavaScript bundle when the app is
+**built**, not when it starts. Setting the token on an already-built container
 does nothing, which is why `docker-compose.yml` passes it as a build argument
 rather than an environment variable.
 
-A Mapbox *public* token (`pk.…`) is designed to be visible in client-side code —
-that is not a leak in itself — but it is billed to whoever owns it, so use your
-own and restrict it by URL in the Mapbox dashboard.
+A Mapbox *public* token is designed to be visible in client-side code, so
+shipping one in a bundle is not a leak in itself — but it is billed to whoever
+owns it. Use your own, and restrict it by URL in the Mapbox dashboard.
 
-## Development
+## Scripts
 
 ```bash
 npm run dev          # dev server on $PORT (default 4500)
 npm run build        # production build; fails on type errors
 npm start            # serve the production build
-npm test             # vitest, 32 tests
-npm run test:watch   # vitest in watch mode
+npm test             # vitest — 32 tests across 4 files
 npm run lint         # eslint via next lint
 npm run typecheck    # tsc --noEmit
 ```
 
-`npm test` is offline by design. `test/setup.ts` replaces `fetch` and
+`npm test` is offline by design: `test/setup.ts` replaces `fetch` and
 `XMLHttpRequest` with stubs that throw, so a test that tried to reach Mapbox for
-tiles — which costs money per request — fails loudly instead of quietly working
-on one machine and not another.
+tiles — which costs real money per request, on someone's account — fails loudly
+instead of quietly passing on one machine and not another.
 
-## Project structure
+## Where things live
 
 ```
 src/
-  domain/                  pure arithmetic and data. No React, no Mapbox, no fs.
-    conversion.ts            the two conversions, and the Mercator limit
-    conversion.test.ts
-    pointsOfInterest.ts      the four supplied measurements and their answer key
-    pointsOfInterest.test.ts
-    polygon.ts               coordinates -> a closed GeoJSON ring
-    polygon.test.ts
-  server/                  node-only. Reads files, writes responses.
-    datasets.ts              the registry of every file the API serves
-    serveDataset.ts          resolve, stream, cache, 404
-    serveDataset.test.ts
-  hooks/
-    useCoastline.ts          fetch centimetre measurements, convert, expose
+  domain/          pure arithmetic and data. No React, no Mapbox, no fs.
+    conversion.ts      the two conversions and the Mercator limit
+    pointsOfInterest.ts  the four supplied measurements and the published answers
+    polygon.ts         coordinates -> a closed GeoJSON ring
+  server/          node-only. Reads files, writes responses.
+    datasets.ts        the registry of every file the API serves
+    serveDataset.ts    resolve, stream, cache, 404
+  hooks/useCoastline.ts   fetch centimetre measurements, convert, expose
   components/
-    EarthMap.tsx             the map, loaded via next/dynamic
-    LngLatPolygon.tsx        a polygon with optional draggable handles
-    MissingTokenNotice.tsx   what renders instead when no token is set
-  pages/
-    index.tsx                layout, readout state, token branch
-    api/                     three dataset routes and a health probe
-  styles/
-public/
-  partial-brazil.json        Brazil's coastline, in cm on the paper map
-  countries_coords.json      every country outline, in lng/lat
-  countries_physical.json    every country outline, in cm on the paper map
-  map.jpg, map-measurement.jpg   the supplied paper map, and the brief's diagram
-world-geojson/
-  countries/                 197 source outlines
-  get_all_polygons.py        merges them into the two countries_*.json above
-scripts/
-  thin_coastline.py          keep one coastline vertex in every N
-test/
-  setup.ts                   the no-network guard
-docs/                        screenshots
+    EarthMap.tsx           the map, loaded via next/dynamic
+    LngLatPolygon.tsx      a polygon with optional draggable handles
+    MissingTokenNotice.tsx what renders when no token is set
+  pages/index.tsx   layout, readout state, the token branch
+  pages/api/        three dataset routes and a /api/health probe
+public/            partial-brazil.json plus the two merged country files
+world-geojson/     197 source country outlines and the script that merges them
+scripts/           thin_coastline.py — keep one coastline vertex in every N
 ```
 
-## Design notes
+Each `domain/` and `server/` module sits next to its own `*.test.ts`.
 
-**The domain layer owns no dependencies.** `conversion.ts` used to import
-`LngLat` from `mapbox-gl` and return instances of it, which pointed the most
-valuable module in the project at the heaviest one. It now returns a plain
-`{ lng, lat }`, which a real Mapbox `LngLat` is structurally compatible with, so
-callers are unaffected. The practical effect: the conversion test stopped pulling
-a 400 KB WebGL library into its import graph and got about four times faster
-(933 ms to 218 ms on the same machine).
+## Decisions worth explaining
 
-**Why the map stops at 85.05°.** Mercator never reaches the poles — the
-projection sends latitude 90° to infinite height, so a sheet of any finite size
-has to stop short, at ±85.0511° for one shaped like this. The original code
-special-cased the top and bottom rows to return ±90°, which put a 4.95° cliff
-into an otherwise smooth function and claimed the top edge of the paper was the
-North Pole. That case is gone. The *inverse* still guards, but for a real reason:
-asking where latitude 90° sits on the sheet has no answer, because the maths
-genuinely diverges, so it clamps to the map edge instead of returning `Infinity`.
+**Mapbox GL JS is loaded after paint.** It is the bulk of this page's JavaScript
+and cannot server-render anyway, since it needs a WebGL context. `EarthMap` is
+pulled in with `next/dynamic` and `ssr: false`, which moves it into a chunk the
+browser fetches separately. From `next build` in this checkout:
 
-**The real bottleneck was the bundle, not the server.** There is no database and
-no meaningful per-request work — the API routes stream three static files. What
-was expensive was the first page load: Mapbox GL JS was compiled into the page
-chunk, and it cannot server-render anyway because it needs a WebGL context.
-Loading `EarthMap` through `next/dynamic` with `ssr: false` moves it into a chunk
-the browser fetches after paint. Measured from `next build`:
-
-| | Page JS | First Load JS |
+| Route | Size | First Load JS |
 |---|---|---|
-| before | 416 kB | 490 kB |
-| after | 3.54 kB | 78.5 kB |
+| `/` | 3.54 kB | 78.5 kB |
 
-The second saving is caching. The two country files are 618 KB and 593 KB, and
-they were served with no `Cache-Control` header at all, so a browser re-fetched
-1.2 MB on every load. They are immutable build outputs, so they are now served
-`public, max-age=86400, immutable`.
+**The two country files are cached hard.** `countries_coords.json` and
+`countries_physical.json` are ~1.2 MB together and are immutable build outputs,
+so `serveDataset` sends `public, max-age=86400, immutable`. The test
+*"declares JSON, the exact length, and a cache policy"* pins it.
 
-**One registry, not three copies of the same route.** Each API route used to
-inline its own `fs.createReadStream`, and two of them located their file with
-`path.join(__dirname, "../../../../../public/…")` — five parent segments that
-encode where webpack happens to put the compiled route rather than anything about
-the project. It resolves under a default `next build` and breaks under
-`output: "standalone"`. Every dataset is now declared once in
-`server/datasets.ts` and served by one tested helper that resolves from
-`process.cwd()`. Serving another of the 197 country outlines is a registry entry
-and a three-line route; that is the seam this project actually needs.
+**One registry instead of a copy of the streaming code per route.** Every
+dataset is declared once in `server/datasets.ts`; one tested helper resolves it
+from `process.cwd()` and streams it. Resolving from the working directory rather
+than `__dirname` matters because a `__dirname`-relative path encodes where the
+compiler happened to put the route, which changes under
+`output: "standalone"` — *"resolves paths against the given root, not the
+compiler's output layout"* is the test for it. Serving another of the 197
+country outlines is a registry entry plus a three-line route.
 
-**Tests that can fail.** A suite that only ever goes green proves nothing, so
-each of these was broken on purpose and the suite re-run:
+**The coastline fetch aborts on unmount.** `useCoastline` carries an
+`AbortController` and surfaces a failed request as an `error` string rather than
+silently rendering no outline.
 
-| Mutation | Result |
-|---|---|
-| reinstate the ±90 pole special case | 2 failed, 30 passed |
-| remove the pole clamp, so the inverse returns `Infinity` | 1 failed, 31 passed |
-| transpose lng/lat in the GeoJSON ring | 1 failed, 31 passed |
-| close the ring without guarding the empty case | 1 failed, 31 passed |
-| wrong sheet height (100 cm instead of 64) | 5 failed, 27 passed |
-| drop the cache policy on served datasets | 1 failed, 31 passed |
-| swallow the missing-dataset error instead of 404 | 1 failed, 31 passed |
+## Known gaps
 
-All seven were caught, and the suite returns to `32 passed (32)` once reverted.
-
-**Graceful degradation.** Mapbox GL JS v3 refuses to draw anything without a
-valid token — not even a raster basemap Mapbox does not host, which was verified
-directly. So "no token" previously meant a blank white page with the reason
-visible only in the browser console. The page now branches on the token and
-renders an explanation instead.
-
-## Limitations
-
-- **The basemap needs a Mapbox account.** There is no token-free fallback
-  basemap, because Mapbox GL JS will not render one. Everything except the
-  basemap works without a token.
-- **The paper map is hardcoded at 100 × 64 cm.** The exercise specifies one
-  sheet, so the dimensions are constants rather than configuration.
-- **`world-geojson/all_polygons.json` and `all_coord_polygons.json` are still
-  tracked** despite being byte-identical to the copies in `public/` and listed in
-  `.gitignore`. `.gitignore` does not untrack a file that is already committed;
-  clearing them needs `git rm --cached` and a commit, which has not been done
-  here. That is 1.2 MB of duplication in the repository.
-- **The Mapbox token that was hardcoded in the original source is still present
-  in the git history.** It was removed from the working tree, but removing a
-  secret from the tip of a branch does not remove it from earlier commits. It
-  belonged to the exercise author, not to this repository; it should be revoked
-  at the Mapbox dashboard, and the history rewritten, before this is made public.
-- **No end-to-end test of the map itself.** The conversion, the polygon
-  construction and the dataset routes are covered; the React components are
-  verified by type-checking and by hand, not by a component test suite.
+- **No token-free basemap.** Mapbox GL JS v3 will not render one — not even a
+  raster style Mapbox does not host — so "no token" means the notice panel, not
+  a degraded map. Everything except the basemap works without a token.
+- **The sheet is hardcoded at 100 × 64 cm.** The exercise specifies one map, so
+  the dimensions are constants rather than configuration.
+- **No component or end-to-end test.** The conversion, the polygon construction
+  and the dataset routes are covered by the 32 unit tests. The React components
+  are checked by `tsc` and by hand only.
 - **`countries_coords.json` and `countries_physical.json` are served whole.**
   Nothing in the UI consumes them yet, and a client that did would want them
-  filtered or tiled rather than as a single 600 KB response.
+  filtered or tiled rather than as one ~600 KB response.
+- **The polygon is not persisted.** Reloading the page loses it, and there is no
+  undo — clicking only ever appends a vertex.
