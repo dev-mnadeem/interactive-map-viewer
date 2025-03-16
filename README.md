@@ -93,7 +93,7 @@ pins would be a wall of overlapping markers hiding the shape underneath.
 ## Running it
 
 ```bash
-npm install
+npm ci
 npm run dev            # http://localhost:4500
 ```
 
@@ -220,3 +220,14 @@ silently rendering no outline.
   filtered or tiled rather than as one ~600 KB response.
 - **The polygon is not persisted.** Reloading the page loses it, and there is no
   undo — clicking only ever appends a vertex.
+
+## Runtime maintenance
+
+Use Node 22. The clean install, 32 geometry/dataset tests and production build were
+verified with Next.js 15.5.28. The lockfile also pins compatible PostCSS/source-map
+patches. The basemap still requires your own Mapbox token; tests and dataset API
+verification do not make paid tile requests or include a token in the repository.
+
+## Author
+
+[**Muhammad Nadeem**](https://github.com/dev-mnadeem)

@@ -2,7 +2,7 @@
 
 # Next 13.1 needs a Node 18 toolchain; newer majors break its SWC binary
 # resolution.
-ARG NODE_VERSION=18-alpine
+ARG NODE_VERSION=22-alpine
 
 # ---- dependencies (everything, including the build toolchain) ---------------
 FROM node:${NODE_VERSION} AS deps

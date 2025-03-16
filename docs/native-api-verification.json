@@ -1,0 +1,23 @@
+{
+  "checks": [
+    {
+      "path": "/api/brazil",
+      "status": 200,
+      "cache_control": "public, max-age=86400, immutable",
+      "top_level_type": "list"
+    },
+    {
+      "path": "/api/countries/coords",
+      "status": 200,
+      "cache_control": "public, max-age=86400, immutable",
+      "top_level_type": "dict"
+    },
+    {
+      "path": "/api/countries/physical",
+      "status": 200,
+      "cache_control": "public, max-age=86400, immutable",
+      "top_level_type": "dict"
+    }
+  ],
+  "basemap": "Not requested: no Mapbox token configured"
+}
